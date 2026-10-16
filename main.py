@@ -70,6 +70,22 @@ start_year = int(years.min())
 end_year = int(years.max())
 training_count = len(yearly)
 
+# 최근 20년: 학습 자료에서 가장 마지막으로 남은 연도를 기준으로 20년 구간을 정합니다.
+recent_end_year = end_year
+recent_start_year = recent_end_year - 19
+recent = yearly[yearly["연도"].between(recent_start_year, recent_end_year)].copy()
+if len(recent) >= 2:
+    recent_slope, recent_intercept = np.polyfit(
+        recent["연도"].to_numpy(dtype=float),
+        recent["연평균기온"].to_numpy(dtype=float),
+        1,
+    )
+    recent_start_used = int(recent["연도"].min())
+    recent_end_used = int(recent["연도"].max())
+else:
+    recent_slope, recent_intercept = np.nan, np.nan
+    recent_start_used = recent_end_used = None
+
 selected_year = st.slider(
     "예상 기온을 확인할 연도",
     min_value=1900,
@@ -86,6 +102,24 @@ st.markdown(
     unsafe_allow_html=True,
 )
 st.caption("과거 연도별 평균기온에 맞춘 선형 회귀 직선으로 계산한 추정값입니다.")
+
+st.subheader("100년에 기온이 얼마나 오를까?")
+trend_all, trend_recent = st.columns(2)
+with trend_all:
+    st.metric("전체 학습 기간의 변화", f"{slope * 100:+.2f} °C / 100년")
+    st.caption(
+        f"{start_year}~{end_year}년 · {training_count}개 연도 사용"
+    )
+with trend_recent:
+    if np.isfinite(recent_slope):
+        st.metric("최근 20년의 변화", f"{recent_slope * 100:+.2f} °C / 100년")
+        st.caption(
+            f"최근 20년 구간 중 유효 자료 {recent_start_used}~{recent_end_used}년, "
+            f"{len(recent)}개 연도 사용"
+        )
+    else:
+        st.metric("최근 20년의 변화", "계산할 수 없음")
+        st.caption("최근 20년 구간에 유효한 연도가 2개 미만입니다.")
 
 metric1, metric2, metric3, metric4 = st.columns(4)
 metric1.metric("회귀 학습 연도 수", f"{training_count:,}년")
@@ -147,7 +181,12 @@ st.write(
     f"- 학습에 사용한 연도 수: **{training_count}개**\n"
     f"- 시작 연도: **{start_year}년**\n"
     f"- 끝 연도: **{end_year}년**\n"
-    f"- 회귀식: **예상 기온 = {slope:.5f} × 연도 + ({intercept:.2f})**"
+    f"- 전체 기간 회귀식: **예상 기온 = {slope:.5f} × 연도 + ({intercept:.2f})**\n"
+    + (
+        f"- 최근 20년 회귀식: **예상 기온 = {recent_slope:.5f} × 연도 + ({recent_intercept:.2f})**"
+        if np.isfinite(recent_slope)
+        else "- 최근 20년 회귀식: 계산할 수 없음"
+    )
 )
 st.write(
     f"- 상관계수(연도와 연평균기온): **{correlation:.3f}**"
